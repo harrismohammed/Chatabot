@@ -15,8 +15,8 @@ from tensorflow.python.layers.core import Dense
  
  
 # Importing the dataset
-lines = open('lines.txt', encoding = 'utf-8', errors = 'ignore').read().split('\n')
-conversations = open('conversations.txt', encoding = 'utf-8', errors = 'ignore').read().split('\n')
+lines = open('movie_lines.txt', encoding = 'utf-8', errors = 'ignore').read().split('\n')
+conversations = open('movie_conversations.txt', encoding = 'utf-8', errors = 'ignore').read().split('\n')
  
 # Creating a dictionary that maps each line and its id
 id2line = {}
@@ -153,8 +153,8 @@ def model_inputs():
     targets = tf.placeholder(tf.int32, [None, None], name='targets')
     keep_prob = tf.placeholder(tf.float32, name='dropout_rate')
     lr = tf.placeholder(tf.float32, name = 'learning_rate')
-    encoder_seq_len = tf.placeholder(tf.int32, (None, ), name='encoder_seq_len')
-    decoder_seq_len = tf.placeholder(tf.int32, (None, ), name='decoder_seq_len')
+    encoder_seq_len = tf.placeholder_with_default(25, None, name='encoder_seq_len')
+    decoder_seq_len = tf.placeholder_with_default(25, None, name='decoder_seq_len')
     max_seq_len = tf.reduce_max(decoder_seq_len, name='max_seq_len')
 
     return inputs, targets, keep_prob, lr, encoder_seq_len, decoder_seq_len, max_seq_len
@@ -188,7 +188,7 @@ def encoder(inputs, rnn_size, num_layers, encoder_seq_len, keep_prob, encoder_vo
 
 
 
-def attention_mech(rnn_size, keep_probs, encoder_output, encoder_state, encoder_seq_len, batch_size):
+def attention_mech(rnn_size, keep_prob, encoder_output, encoder_state, encoder_seq_len, batch_size):
    
     #using internal function to easier create RNN cell
     def cell(units, probs):
@@ -196,7 +196,7 @@ def attention_mech(rnn_size, keep_probs, encoder_output, encoder_state, encoder_
         return tf.contrib.rnn.DropoutWrapper(layer, probs)
     
     #defining rnn_cell
-    decoder_cell = cell(rnn_size, keep_probs)
+    decoder_cell = cell(rnn_size, keep_prob)
     
     #using helper function from seq2seq sub_lib for Bahdanau attention
     attention_mechanism = tf.contrib.seq2seq.BahdanauAttention(rnn_size, 
@@ -267,17 +267,19 @@ def decoder(decoder_embedded_input, encoder_state, dec_cell, decoder_embed_size,
     return train_prediction, test_prediction
 
 # Building the seq2seq model
-def seq2seq_model(inputs, targets, keep_prob, batch_size, max_seq_len, answers_num_words, questions_num_words, encoder_embed_size, decoder_embedding_size, rnn_size, num_layers, questionswords2int):
+def seq2seq_model(inputs, targets, keep_prob, batch_size, max_seq_len, answers_num_words, questions_num_words, encoder_embed_size, decoder_embed_size, rnn_size, num_layers, questionswords2int):
     encoder_embedded_input = tf.contrib.layers.embed_sequence(inputs,
                                                               answers_num_words + 1,
                                                               encoder_embed_size,
                                                               initializer = tf.random_uniform_initializer(0, 1))
     encoder_vocab_size = answers_num_words + 1
+    vocab_size = questions_num_words + 1
     encoder_state = encoder(encoder_embedded_input, rnn_size, num_layers, keep_prob, encoder_seq_len, encoder_vocab_size, encoder_embed_size)
     
     preprocessed_targets = preprocess_targets(targets, questionswords2int, batch_size)
-    decoder_embeddings_matrix = tf.Variable(tf.random_uniform([questions_num_words + 1, decoder_embedding_size], 0, 1))
+    decoder_embeddings_matrix = tf.Variable(tf.random_uniform([questions_num_words + 1, decoder_embed_size], 0, 1))
     decoder_embedded_input = tf.nn.embedding_lookup(decoder_embeddings_matrix, preprocessed_targets)
+    
     training_predictions, test_predictions = decoder(decoder_embedded_input,
                                                      decoder_embeddings_matrix,
                                                      encoder_state,
@@ -299,12 +301,12 @@ epochs = 100
 batch_size = 64
 rnn_size = 512
 num_layers = 3
-encoding_embedding_size = 512
-decoding_embedding_size = 512
-learning_rate = 0.01
+encoder_embed_size = 512
+decoder_embed_size = 512
+lr = 0.01
 learning_rate_decay = 0.9
 min_learning_rate = 0.0001
-keep_probability = 0.5
+keep_prob = 0.5
  
 # Defining a session
 tf.reset_default_graph()
@@ -318,6 +320,7 @@ input_shape = tf.shape(inputs)
  
 
 # Getting the training and test predictions
+
 training_predictions, test_predictions = seq2seq_model(tf.reverse(inputs, [-1]),
                                                        targets,
                                                        keep_prob,
@@ -325,10 +328,8 @@ training_predictions, test_predictions = seq2seq_model(tf.reverse(inputs, [-1]),
                                                        max_seq_len,
                                                        len(answerswords2int),
                                                        len(questionswords2int),
-                                                       encoding_embedding_size,
-                                                       decoding_embedding_size,
+                                                       encoder_embed_size,
+                                                       decoder_embed_size,
                                                        rnn_size,
                                                        num_layers,
                                                        questionswords2int)
- 
-
